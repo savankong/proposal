@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Proposal Draft Assistant</title>
+</head>
+<body>
+  <h2>Welcome, {{ session['username'] }}</h2>
+  <form action="/upload" method="post" enctype="multipart/form-data">
+    <label>Upload RFP PDF:</label>
+    <input type="file" name="file">
+    <button type="submit">Upload</button>
+  </form>
+
+  <form action="/" method="post">
+    <label>Ask a Proposal Question:</label><br>
+    <textarea name="question" rows="4" cols="60"></textarea><br>
+    <button type="submit">Generate</button>
+  </form>
+
+  <h3>Generated Draft Response:</h3>
+  <p>{{ response }}</p>
+
+  <a href="/logout">Logout</a>
+</body>
+</html>
