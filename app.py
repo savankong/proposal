@@ -1,9 +1,9 @@
 from flask import Flask, request, render_template, redirect, url_for, session, flash
 from werkzeug.utils import secure_filename
-from langchain.llms import OpenAI
+from langchain_community.llms import OpenAI
 from langchain.chains import RetrievalQA
-from langchain.vectorstores import FAISS
-from langchain.embeddings import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import OpenAIEmbeddings
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.prompts import PromptTemplate
