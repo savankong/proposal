@@ -1,25 +1,20 @@
 
 import logging
 from flask import Flask, request, render_template, redirect, url_for, session, flash
-from werkzeug.utils import secure_filename
 from langchain_community.llms import OpenAI
 from langchain.chains import RetrievalQA
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import OpenAIEmbeddings
-from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.prompts import PromptTemplate
+from langchain.schema import Document
 import os
 
 logging.basicConfig(level=logging.DEBUG)
 
-UPLOAD_FOLDER = 'uploads'
-ALLOWED_EXTENSIONS = {'pdf'}
 SECRET_KEY = 'supersecretkey'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.secret_key = SECRET_KEY
 
 embedding_model = OpenAIEmbeddings()
@@ -43,56 +38,40 @@ Draft Response:
 
 users = {'admin': 'password123'}
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if 'username' not in session:
         return redirect(url_for('login'))
+
     response = ""
     if request.method == 'POST':
-        question = request.form['question']
-        if qa_chain:
+        if 'rfp_text' in request.form:
             try:
-                response = qa_chain.run(question)
+                rfp_text = request.form['rfp_text']
+                text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+                docs = text_splitter.split_documents([Document(page_content=rfp_text)])
+                global vectorstore, qa_chain
+                vectorstore = FAISS.from_documents(docs, embedding_model)
+                llm = OpenAI(temperature=0.2)
+                qa_chain = RetrievalQA.from_chain_type(
+                    llm=llm,
+                    retriever=vectorstore.as_retriever(),
+                    chain_type="stuff",
+                    chain_type_kwargs={"prompt": prompt_template}
+                )
+                flash("RFP text submitted and processed!")
             except Exception as e:
-                logging.exception("Error generating proposal content")
+                logging.exception("Failed to process RFP text")
+                flash(f"Error processing RFP: {e}")
+        elif 'question' in request.form:
+            try:
+                question = request.form['question']
+                if qa_chain:
+                    response = qa_chain.run(question)
+            except Exception as e:
+                logging.exception("Error generating response")
                 flash(f"Error: {e}")
     return render_template('index.html', response=response)
-
-@app.route('/upload', methods=['POST'])
-def upload():
-    global vectorstore, qa_chain
-    try:
-        if 'username' not in session:
-            return redirect(url_for('login'))
-        file = request.files['file']
-        if not file or file.filename == '' or not allowed_file(file.filename):
-            flash('Invalid file')
-            return redirect(url_for('index'))
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-
-        loader = PyPDFLoader(filepath)
-        documents = loader.load()
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        docs = text_splitter.split_documents(documents)
-        vectorstore = FAISS.from_documents(docs, embedding_model)
-
-        llm = OpenAI(temperature=0.2)
-        qa_chain = RetrievalQA.from_chain_type(
-            llm=llm,
-            retriever=vectorstore.as_retriever(),
-            chain_type="stuff",
-            chain_type_kwargs={"prompt": prompt_template}
-        )
-        flash('File uploaded and processed successfully!')
-    except Exception as e:
-        logging.exception("File upload failed")
-        flash(f"Upload failed: {e}")
-    return redirect(url_for('index'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
