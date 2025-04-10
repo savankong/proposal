@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Proposal Draft Assistant</title>
+</head>
+<body>
+  <h2>Welcome, {{ session['username'] }}</h2>
+  <form method="post">
+    <label>Paste RFP Text:</label><br>
+    <textarea name="rfp_text" rows="10" cols="80"></textarea><br>
+    <button type="submit">Submit RFP</button>
+  </form>
+  
+  <hr>
+  
+  <form method="post">
+    <label>Ask a Proposal Question:</label><br>
+    <textarea name="question" rows="4" cols="60"></textarea><br>
+    <button type="submit">Generate</button>
+  </form>
+  
+  <h3>Generated Draft Response:</h3>
+  <p>{{ response }}</p>
+
+  <a href="/logout">Logout</a>
+</body>
+</html>
