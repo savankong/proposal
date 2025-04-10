@@ -1,4 +1,5 @@
 
+import logging
 from flask import Flask, request, render_template, redirect, url_for, session, flash
 from werkzeug.utils import secure_filename
 from langchain_community.llms import OpenAI
@@ -9,6 +10,8 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.prompts import PromptTemplate
 import os
+
+logging.basicConfig(level=logging.DEBUG)
 
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf'}
@@ -25,8 +28,7 @@ qa_chain = None
 
 prompt_template = PromptTemplate(
     input_variables=["context", "question"],
-    template="""
-You are a proposal writer generating responses to a government RFP.
+    template="""You are a proposal writer generating responses to a government RFP.
 Use the context below to answer the question as a draft proposal section.
 
 Context:
@@ -52,36 +54,44 @@ def index():
     if request.method == 'POST':
         question = request.form['question']
         if qa_chain:
-            response = qa_chain.run(question)
+            try:
+                response = qa_chain.run(question)
+            except Exception as e:
+                logging.exception("Error generating proposal content")
+                flash(f"Error: {e}")
     return render_template('index.html', response=response)
 
 @app.route('/upload', methods=['POST'])
 def upload():
     global vectorstore, qa_chain
-    if 'username' not in session:
-        return redirect(url_for('login'))
-    file = request.files['file']
-    if not file or file.filename == '' or not allowed_file(file.filename):
-        flash('Invalid file')
-        return redirect(url_for('index'))
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
+    try:
+        if 'username' not in session:
+            return redirect(url_for('login'))
+        file = request.files['file']
+        if not file or file.filename == '' or not allowed_file(file.filename):
+            flash('Invalid file')
+            return redirect(url_for('index'))
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
 
-    loader = PyPDFLoader(filepath)
-    documents = loader.load()
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    docs = text_splitter.split_documents(documents)
-    vectorstore = FAISS.from_documents(docs, embedding_model)
+        loader = PyPDFLoader(filepath)
+        documents = loader.load()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        docs = text_splitter.split_documents(documents)
+        vectorstore = FAISS.from_documents(docs, embedding_model)
 
-    llm = OpenAI(temperature=0.2)
-    qa_chain = RetrievalQA.from_chain_type(
-        llm=llm,
-        retriever=vectorstore.as_retriever(),
-        chain_type="stuff",
-        chain_type_kwargs={"prompt": prompt_template}
-    )
-    flash('File uploaded and processed successfully!')
+        llm = OpenAI(temperature=0.2)
+        qa_chain = RetrievalQA.from_chain_type(
+            llm=llm,
+            retriever=vectorstore.as_retriever(),
+            chain_type="stuff",
+            chain_type_kwargs={"prompt": prompt_template}
+        )
+        flash('File uploaded and processed successfully!')
+    except Exception as e:
+        logging.exception("File upload failed")
+        flash(f"Upload failed: {e}")
     return redirect(url_for('index'))
 
 @app.route('/login', methods=['GET', 'POST'])
